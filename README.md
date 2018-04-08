@@ -1,7 +1,7 @@
 # Package ImageHistograms.jl
 Implement 2d and 3d histograms of images. Support gray and colored. Include support for plotting and some predefined layouts.
 
-* Goal [ToDo]
+## Goal [ToDo]
 + Check image if balanced
 + Low key
 + High key
@@ -17,14 +17,14 @@ Implement 2d and 3d histograms of images. Support gray and colored. Include supp
 ++ Gnuplot
 ++ GR
 
-* Used Packages
+## Used Packages
 + julia as programming language
 + Images.jl and friends
 + Plots.jl : may change
 + Gnuplot.jl : may change
 + GR.jl : may change
 
-* Background Information and related URLs [ToDo]
+## Background Information and related URLs [ToDo]
 + Color to Gray conversions
 + Color schemes
 + RGB and friends
