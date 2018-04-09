@@ -3,13 +3,23 @@ module ImageHistogramTest
 export imhistogramGray, imhistogramRGB
 
 using Images, Colors
+using Plots #  necessary to be able include a special function for ploting histograms
 
 #####
-# TWA 2018-03-22 : CustomUnitRanges is not usable with julia 0.6.2 ; ==> use OffsetArrays
+# TWA 2018-03-22 : CustomUnitRanges is not usable with julia 0.6.2 for me ; ==> use OffsetArrays
 # using CustomUnitRanges: filename_for_zerorange
 # include(filename_for_zerorange)
 
 # ==> use OffsetArrays
+#  BUT
+#     package Plots cannot handle OffsetArrays
+#     thus the need for a simple function to convert to common julia array
+# flame on
+#     and all this just because julia has 1 offset arrays - grrrr
+# flame off
+#
+
+#= # begin{OffsetArray off}
 using OffsetArrays
 t_oa = OffsetArray{Int32}(0:255); # defines an array with index 0 .. 255; values are not initialized
 summary(t_oa); # gives some info about t_oa
@@ -25,6 +35,7 @@ summary(t_oa); # gives some info about t_oa
 #####
 ## From OffsetArrays package Readme:
 #   If your package makes use of OffsetArrays, you can also add the following internal convenience definitions:
+#   These versions should work for all types.
 
 _size(A::AbstractArray) = map(length, indices(A))
 _size(A) = size(A)
@@ -32,7 +43,6 @@ _size(A) = size(A)
 _length(A::AbstractArray) = length(linearindices(A))
 _length(A) = length(A)
 
-#   These versions should work for all types.
     
 #####
 # convert OffsetArray to Julia array
@@ -45,6 +55,8 @@ function conv_Offset_to_julia_Array(vma::OffsetArray)
     vma[0:end];
 end
 cOtjA(x) = conv_Offset_to_julia_Array(x); # short name for above
+=# # end{OffsetArray off}
+
     
 #####
 # convert sRGB (non-linear) to linearRGB (also used for sRGB to XYZ)
@@ -289,7 +301,23 @@ function imhistogramRGB3d_new2(imarray::AbstractArray)
     # now this can be plotted as 3D using gnuplot from julia
     # with the command
     #   @gp(splot=true,redv[:],greenv[:],bluev[:],colv[:],"with points pt 13 ps 0.7 lc rgb variable")
-                         
+    #
+    # befor plotting with gnuplot, some crafting is necessary
+    # 1) convert colv using
+    #   gen_pcv(cv24_a)=(pcv24=zeros(length(cv24_a));for i = 1:endof(cv24_a); pcv24[i]=cv24_a[i].color; end;return pcv24)
+    # 2) convert red, green, blue parts
+    #   redv=redv*255.0;
+    #   greenv=greenv*255.0;
+    #   bluev=bluev*255.0;
+    #
+    # damn - still no 3d-plot with @gp.  somewhere there was a significant change:
+    #     !!!! the syntax is not accepted any more !!!!
+    #     !!!! splot wants a function instead of data !!!!
+
+    # 1st own 3 plot
+    # @gp("set hidden3d", "set grid", "splot 'data3d.txt' using 1:2:3 with points pt 13 ps 0.7 lc rgb variable")
+    # @gp("set grid; set xlabel 'red'; set ylabel 'green'; set zlabel 'blue'", "splot 'data3d.txt' using 1:2:3 with points pt 13 ps 0.7 lc rgb variable")
+    # still not possible to splot data. Worked last year !!!
     
 #    return red_ivector, green_ivector, blue_ivector, col_ivector;
     return red_cube_iv, green_cube_iv, blue_cube_iv, col_cube_iv;
@@ -353,46 +381,139 @@ end # function normalize_histogram(imhisto_raw::AbstractArray, norm_type::Int = 
 # ToDo : => no, array tooooo large
 # my_rgb24int = Int32.(floor.(red.(colv)*255)) .<< 16 .+ Int32.(floor.(green.(colv)*255)) .<< 8 .+ Int32.(floor.(blue.(colv)*255))
 
-#=
-# das folgende braucht noch 'using Plots'
-# Plot examples:
+function plot_imhi(;ihGray_cooked::AbstractArray = [0], ihR_cooked::AbstractArray = [0],
+                   ihG_cooked::AbstractArray = [0], ihB_cooked::AbstractArray = [0],
+                   how::Int = 1, bg::Int = 0)
+    #
+    if (bg == 0)
+        theme(:dark); # good for electronic media
+        GrayShade=:lightgray;
+    else
+        theme(:default); # good for paper
+        GrayShade=:gray71;
+    end        
 
-function plot_imhi_RGB(imarray::AbstractArray)
-    ihr, ihg, ihb = ImageHistogram.imhistogramRGB(imarray);
-    plot(ihr, color=:red, w=2)
-    plot!(ihg, color=:green, w=3)
-    plot!(ihb, color=:blue, w=3)
-    plot!(igray, color=:lightgray, w=3, line=:sticks)
+    if (how == 1)
+        plot(ihGray_cooked, color=GrayShade, w=3, line=:sticks);
+        plot!(ihR_cooked, color=:red, w=3);
+        plot!(ihG_cooked, color=:green, w=3);
+        plot!(ihB_cooked, color=:blue, w=3);
+    elseif (how == 2)
+        pl_Gray = plot(ihGray_cooked, color=GrayShade, w=3, line=:sticks);
+        pl_RGB = plot(ihR_cooked, color=:red, w=3);
+        pl_RGB = plot!(ihG_cooked, color=:green, w=3);
+        pl_RGB = plot!(ihB_cooked, color=:blue, w=3);
+
+        plot(pl_Gray, pl_RGB, layout=(2,1), legend=false);
+    elseif (how == 3)
+        nf = calc_histogram_norm_factor(ihR_cooked, ihG_cooked, ihB_cooked); # ToDo : make it optional
+
+        pl_R = plot(ihR_cooked, ylims=(0,nf), color=:red, w=3);
+        pl_G = plot(ihG_cooked, ylims=(0,nf), color=:green, w=3);
+        pl_B = plot(ihB_cooked, ylims=(0,nf), color=:blue, w=3);
+
+        plot(pl_R, pl_G, pl_B, layout=(3,1), legend=false);
+    elseif (how == 4)
+        nf = calc_histogram_norm_factor(ihGray_cooked, ihR_cooked, ihG_cooked, ihB_cooked); # ToDo : make it optional
+
+        pl_Gray = plot(ihGray_cooked, ylims=(0,nf), color=GrayShade, w=3, line=:sticks);
+        pl_R = plot(ihR_cooked, ylims=(0,nf), color=:red, w=3);
+        pl_G = plot(ihG_cooked, ylims=(0,nf), color=:green, w=3);
+        pl_B = plot(ihB_cooked, ylims=(0,nf), color=:blue, w=3);
+
+        plot(pl_Gray, pl_R, pl_G, pl_B, layout=(2,2), legend=false);
+    end
+end
+
+
+function plot_imhi_GrayRGB(imarray::AbstractArray, how::Int = 1, bg::Int = 0)
+    # bg := 0 => dark theme as background <=> see PlotThemes package for details
+    # bg := 1 => default theme as background
+    #
+    # how := 1 => plot 4 graphs in 1 diagram
+    #     := 2 => 2 subplots : Gray + RGB
+    #     := 3 => 3 subplots : Red, Green, Blue
+    #     := 4 => 4 subplots : Gray, Red, Green, Blue
+    #
+    # ToDo:  change how & background to keyword args.
+    #
+    
+    ihR, ihG, ihB = ImageHistogramTest.imhistogramRGB(imarray);
+    ihGray = ImageHistogramTest.imhistogramGray(imarray);
+
+    if (background == 0)
+        theme(:dark); # good for electronic media
+        GrayShade=:lightgray;
+    else
+        theme(:default); # good for paper
+        GrayShade=:gray71;
+    end        
+
+    if (how == 1)
+        plot(ihGray, color=GrayShade, w=3, line=:sticks);
+        plot!(ihR, color=:red, w=3);
+        plot!(ihG, color=:green, w=3);
+        plot!(ihB, color=:blue, w=3);
+    elseif (how == 2)
+        pl_Gray = plot(ihGray, color=GrayShade, w=3, line=:sticks);
+        pl_RGB = plot(ihR, color=:red, w=3);
+        pl_RGB = plot!(ihG, color=:green, w=3);
+        pl_RGB = plot!(ihB, color=:blue, w=3);
+
+        plot(pl_Gray, pl_RGB, layout=(2,1), legend=false);
+    elseif (how == 3)
+        nf = calc_histogram_norm_factor(ihR, ihG, ihB); # ToDo : make it optional
+
+        pl_R = plot(ihR, ylims=(0,nf), color=:red, w=3);
+        pl_G = plot(ihG, ylims=(0,nf), color=:green, w=3);
+        pl_B = plot(ihB, ylims=(0,nf), color=:blue, w=3);
+
+        plot(pl_R, pl_G, pl_B, layout=(3,1), legend=false);
+    elseif (how == 4)
+        nf = calc_histogram_norm_factor(ihGray, ihR, ihG, ihB); # ToDo : make it optional
+
+        pl_Gray = plot(ihGray, ylims=(0,nf), color=GrayShade, w=3, line=:sticks);
+        pl_R = plot(ihR, ylims=(0,nf), color=:red, w=3);
+        pl_G = plot(ihG, ylims=(0,nf), color=:green, w=3);
+        pl_B = plot(ihB, ylims=(0,nf), color=:blue, w=3);
+
+        plot(pl_Gray, pl_R, pl_G, pl_B, layout=(2,2), legend=false);
+    end
+        
+    
+    #=
+    # das folgende braucht noch 'using Plots'
+    # Plot examples:
     # or using as subplot
     # plot_red = plot(ihr, line=:red, w=2);
     # plot(plot_red, plot_green, plot_blue, plot_gray,layout=(2,2),legend=false)
+    
+    # WATCH OUT !!  WATCH OUT !!
+    # after switching to use OffsetArrays
+    # plot needs another syntax
+    #     plot(ihR[0:end], line=:red)
+    #
 
-  # WATCH OUT !!  WATCH OUT !!
-  # after switching to use OffsetArrays
-  # plot needs another syntax
-  #     plot(ihR[0:end], line=:red)
-  #
+    ploting into a 3d RGB-cube:
+    using Images, TestImages ; import ImageHistogram ; img_col256 = testimage("lena_color_256");
+    redv, greenv,bluev, colv = ImageHistogram.imhistogramRGB3d(img_col256);
+    redv1=redv[1:32:65536]; greenv1=greenv[1:32:65536]; bluev1=bluev[1:32:65536]; colv1=colv[1:32:65536];
+    
+    plot using Plots:
+    scatter3d(redv1, greenv1, bluev1, xlabel="red",ylabel="green",zlabel="blue"; color=colv1)
+    
+    plot using GR:
+    setmarkersize=1; setmarkertype(GR.MARKERTYPE_DOT)
+    scatter3(redv1, greenv1, bluev1, xlabel="red",ylabel="green",zlabel="blue"; color=colv1)
+    
+    the previous is not as good as using gnuplot
+    some reasons:
+    Plots and GR do not support x-, y-, z-lables as expected
+    take too long
+    ? grid ?
+    ? user defined view angle ?
+    
+    =#
+end # function plot_imhi_GrayRGB
 
-ploting into a 3d RGB-cube:
-using Images, TestImages ; import ImageHistogram ; img_col256 = testimage("lena_color_256");
-redv, greenv,bluev, colv = ImageHistogram.imhistogramRGB3d(img_col256);
-redv1=redv[1:32:65536]; greenv1=greenv[1:32:65536]; bluev1=bluev[1:32:65536]; colv1=colv[1:32:65536];
-
-plot using Plots:
-scatter3d(redv1, greenv1, bluev1, xlabel="red",ylabel="green",zlabel="blue"; color=colv1)
-
-plot using GR:
-setmarkersize=1; setmarkertype(GR.MARKERTYPE_DOT)
-scatter3(redv1, greenv1, bluev1, xlabel="red",ylabel="green",zlabel="blue"; color=colv1)
-
-the previous is not as good as using gnuplot
-some reasons:
-  Plots and GR do not support x-, y-, z-lables as expected
-  take too long
-  ? grid ?
-  ? user defined view angle ?
-
-end # function plot_imhi_RGB
-=#
-
-end # module ImageHistory
+end # module ImageHistoryTest
