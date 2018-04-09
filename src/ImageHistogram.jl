@@ -4,9 +4,36 @@ export imhistogramGray, imhistogramRGB
 
 using Images, Colors
 
-using CustomUnitRanges: filename_for_zerorange
-include(filename_for_zerorange)
+#####
+# TWA 2018-03-22 : CustomUnitRanges is not usable with julia 0.6.2 ; ==> use OffsetArrays
+# using CustomUnitRanges: filename_for_zerorange
+# include(filename_for_zerorange)
 
+# ==> use OffsetArrays
+using OffsetArrays
+t_oa = OffsetArray{Int32}(0:255); # defines an array with index 0 .. 255; values are not initialized
+summary(t_oa); # gives some info about t_oa
+t_oa = OffsetArray(Int32, 0:255);
+summary(t_oa); # gives some info about t_oa
+t_oa = OffsetArray(Int16, 0:255);
+summary(t_oa); # gives some info about t_oa
+t_oa = OffsetArray(UInt16, 0:255);
+summary(t_oa); # gives some info about t_oa
+t_oa = OffsetArray(zeros(Int16, 256), 0:255)
+summary(t_oa); # gives some info about t_oa
+
+#####
+# convert OffsetArray to Julia array
+# flame on
+#  julia has one major design mistake - array indices start at 1 instead of zero
+# flame off
+#
+
+function conv_Offset_to_julia_Array(vma::AbstractArray)
+    vma[0:end];
+end
+cOtjA(x) = conv_Offset_to_julia_Array(x); # short name for above
+    
 #####
 # convert sRGB (non-linear) to linearRGB (also used for sRGB to XYZ)
 function linearRGB_from_sRGB(v)
@@ -53,12 +80,18 @@ function _imhistogram(array2D::T) where T<:AbstractArray
     return ihist;
 end # function histogram of gray image
 =#
-function _imhistogram(array2D::T, ncolorsteps) where T<:AbstractArray
+function _imhistogram(array2D::T, ncolors) where T<:AbstractArray
     # I don't like fortran order - 1-offset arrays - driving on the left side
-    ihist = zeros(Int32, ncolorsteps + 1);
+    ncolorsteps = ncolors - 1;
+    ihist = zeros(Int32, ncolors); # zeros(UInt16, ncolors) or zeros(Int32, ncolors);
+    # ihist = zeros(OffsetArray(UInt16, 0:ncolorsteps));
     for p in array2D
-        channel = Int32(floor(p));
+        # channel = Int32(floor(p * ncolorsteps));
+        #channel = floor(UInt16, p * ncolorsteps); # using julia-0.6.2 : OK with RGB ; FAIL with Gray
+        channel = UInt16(floor(p * ncolorsteps)); # using julia-0.6.2 : OK with Gray and RGB
+        
         ihist[channel+1] += 1; # Bugfix : use 'channel+1' as channel can be 0 if no color. max(channel) is <= 255 for 'N0f8'
+        #ihist[channel] += 1; # using OffsetArray the channel of black is a valid index
     end # for p
     
     return ihist;
@@ -74,20 +107,20 @@ function imhistogramGray(imarray::AbstractArray)
     # ToDo: currently assume 8-bit per pixel per color
     typname = string("t", zero(Gray(imarray[1]))); # string("t", zero(Gray.(imarray)));
     if searchindex(typname, "N0f8") > 0
-        myfactor = 2^8 - 1;
+        ncolors = 2^8;
     elseif searchindex(typname, "N6f10") > 0
-        myfactor = 2^10 - 1;
+        ncolors = 2^10;
     elseif searchindex(typname, "N4f12") > 0
-        myfactor = 2^12 - 1;
+        ncolors = 2^12;
     elseif searchindex(typname, "N2f14") > 0
-        myfactor = 2^14 - 1;
+        ncolors = 2^14;
     elseif searchindex(typname, "N0f16") > 0
-        myfactor = 2^16 - 1;
+        ncolors = 2^16;
     else
-        myfactor = 369; # artifical value to make the result worse
+        ncolors = 369; # artifical value to make the result worse
     end
             
-    histo_gray = _imhistogram(Gray.(imarray) * myfactor, myfactor);
+    histo_gray = _imhistogram(Gray.(imarray), ncolors);
     return histo_gray;
 end # function histogram of gray image
 
@@ -99,22 +132,22 @@ function imhistogramRGB(imarray::AbstractArray)
     # ToDo: currently assume 8-bit per pixel per color
     typname = string("t", zero(red(imarray[1]))); # string("t", zero(red.(imarray)));
     if searchindex(typname, "N0f8") > 0
-        myfactor = 2^8 - 1;
+        ncolors = 2^8;
     elseif searchindex(typname, "N6f10") > 0
-        myfactor = 2^10 - 1;
+        ncolors = 2^10;
     elseif searchindex(typname, "N4f12") > 0
-        myfactor = 2^12 - 1;
+        ncolors = 2^12;
     elseif searchindex(typname, "N2f14") > 0
-        myfactor = 2^14 - 1;
+        ncolors = 2^14;
     elseif searchindex(typname, "N0f16") > 0
-        myfactor = 2^16 - 1;
+        ncolors = 2^16;
     else
-        myfactor = 369; # artifical value to make the result worse
+        ncolors = 369; # artifical value to make the result worse
     end
             
-    histo_red   = _imhistogram(red.(imarray) * myfactor, myfactor);
-    histo_green = _imhistogram(green.(imarray) * myfactor, myfactor);
-    histo_blue  = _imhistogram(blue.(imarray) * myfactor, myfactor);
+    histo_red   = _imhistogram(red.(imarray), ncolors);
+    histo_green = _imhistogram(green.(imarray), ncolors);
+    histo_blue  = _imhistogram(blue.(imarray), ncolors);
 
     return histo_red, histo_green, histo_blue;
 end # function histogram of RGB image
@@ -122,17 +155,17 @@ end # function histogram of RGB image
 function imhistogramRGB3d(imarray::AbstractArray)
     typname = string("t", zero(red(imarray[1]))); # string("t", zero(red.(imarray)));
     if searchindex(typname, "N0f8") > 0
-        myfactor = 2^8 - 1;
+        ncolors = 2^8;
     elseif searchindex(typname, "N6f10") > 0
-        myfactor = 2^10 - 1;
+        ncolors = 2^10;
     elseif searchindex(typname, "N4f12") > 0
-        myfactor = 2^12 - 1;
+        ncolors = 2^12;
     elseif searchindex(typname, "N2f14") > 0
-        myfactor = 2^14 - 1;
+        ncolors = 2^14;
     elseif searchindex(typname, "N0f16") > 0
-        myfactor = 2^16 - 1;
+        ncolors = 2^16;
     else
-        myfactor = 369; # artifical value to make the result worse
+        ncolors = 369; # artifical value to make the result worse
     end
 
     # 1st version
@@ -203,6 +236,12 @@ function plot_imhi_RGB(imarray::AbstractArray)
     # or using as subplot
     # plot_red = plot(ihr, line=:red, w=2);
     # plot(plot_red, plot_green, plot_blue, plot_gray,layout=(2,2),legend=false)
+
+  # WATCH OUT !!  WATCH OUT !!
+  # after switching to use OffsetArrays
+  # plot needs another syntax
+  #     plot(ihR[0:end], line=:red)
+  #
 
 ploting into a 3d RGB-cube:
 using Images, TestImages ; import ImageHistogram ; img_col256 = testimage("lena_color_256");
