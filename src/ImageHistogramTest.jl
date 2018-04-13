@@ -421,8 +421,7 @@ function plot_imhi(;ihGray_cooked::AbstractArray = [0], ihR_cooked::AbstractArra
         pl_G = plot(ihG_cooked, ylims=(0,nf), color=:green, w=3);
         pl_B = plot(ihB_cooked, ylims=(0,nf), color=:blue, w=3);
 
-        #plot(pl_Gray, pl_R, pl_G, pl_B, layout=(2,2), legend=false);
-        plot(pl_Gray, pl_B, pl_G, pl_R, layout=(2,2), legend=false);
+        plot(pl_Gray, pl_R, pl_G, pl_B, layout=(2,2), legend=false);
     end
 end
 
