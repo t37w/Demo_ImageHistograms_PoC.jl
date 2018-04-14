@@ -302,6 +302,11 @@ function imhistogramRGB3d_new2(imarray::AbstractArray)
     # with the command
     #   @gp(splot=true,redv[:],greenv[:],bluev[:],colv[:],"with points pt 13 ps 0.7 lc rgb variable")
     #
+    #   much better
+    # @gp(splot=true,redv[:],greenv[:],bluev[:],gen_pcv(colv[:]),"with points pt 13 ps 0.7 lc rgb variable", xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
+    #
+    # @gp(splot=true,redv[1:10:end],greenv[1:10:end],bluev[1:10:end],gen_pcv(colv[1:10:end]),"with points pt 13 ps 0.7 lc rgb variable", xrange=(0,255), yrange=(0,255), zrange=(0,255), xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
+    #
     # befor plotting with gnuplot, some crafting is necessary
     # 1) convert colv using
     #   gen_pcv(cv24_a)=(pcv24=zeros(length(cv24_a));for i = 1:endof(cv24_a); pcv24[i]=cv24_a[i].color; end;return pcv24)
@@ -313,6 +318,12 @@ function imhistogramRGB3d_new2(imarray::AbstractArray)
     # damn - still no 3d-plot with @gp.  somewhere there was a significant change:
     #     !!!! the syntax is not accepted any more !!!!
     #     !!!! splot wants a function instead of data !!!!
+    #
+    # !!!!! Intermediate Solution !!!!!
+    # manually checkout commit  1665b78a54a0b67ce6b61c2b8ebfe0f409a47ae4
+    # from Gnuplot.jl
+    # !!!!! !!!!!
+    #
 
     # 1st own 3 plot
     # @gp("set hidden3d", "set grid", "splot 'data3d.txt' using 1:2:3 with points pt 13 ps 0.7 lc rgb variable")
