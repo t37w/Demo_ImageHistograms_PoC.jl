@@ -320,8 +320,13 @@ function imhistogramRGB3d_new2(imarray::AbstractArray)
     #     !!!! splot wants a function instead of data !!!!
     #
     # !!!!! Intermediate Solution !!!!!
-    # manually checkout commit  1665b78a54a0b67ce6b61c2b8ebfe0f409a47ae4
-    # from Gnuplot.jl
+    # manually checkout commit  1665b78a54a0b67ce6b61c2b8ebfe0f409a47ae4  from Gnuplot.jl
+    #
+    # manually checkout commit  56b64fcef797cc337eb2d589edf5e95a9abd37f5  from Gnuplot.jl
+    #   works also
+    #
+    # starting with commit 6a4e95f377e3da76026731a99f2c6a918cd87fe8 from Gnuplot.jl 'splot' stops working
+    #
     # !!!!! !!!!!
     #
 

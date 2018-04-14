@@ -9,10 +9,10 @@ Implement 2d and 3d histograms of images. Support gray and colored. Include supp
  + x-, y-, z-axis : derive from red, green, blue
  + plot using colored dots in RGB24 to get an impression of used color distribution within the image
 * identify which Plt package is best for 3d plotting
- + currently under evaluation
-  - Plots
-  - Gnuplot
-  - GR
+ + current decison for purpose :  plot ImageHistograms
+  - Plots : very good for 2D plotting and customitzed layouts
+  - Gnuplot : very good for 3D plotting; in 2D it needs too much typing
+  - GR : out of the game. Found no syntax for RGB colored dots
 
 ## Used Packages
 * julia as programming language
@@ -73,6 +73,15 @@ ImageHistogramTest.plot_imhi_GrayRGB(img_col256)
 ImageHistogramTest.plot_imhi_GrayRGB(img_col256, how=3, bg=0)
 
 ** Plotting 3D: a color cube
+
+manually checkout commit  1665b78a54a0b67ce6b61c2b8ebfe0f409a47ae4 from Gnuplot.jl
+
+  or
+
+manually checkout commit  56b64fcef797cc337eb2d589edf5e95a9abd37f5 from Gnuplot.jl
+
+starting with commit 6a4e95f377e3da76026731a99f2c6a918cd87fe8 from Gnuplot.jl 'splot' stops working
+
 using Gnuplot;
 using Images, TestImages ; reload("ImageHistogram") ; img_col256 = testimage("lena_color_512");
 
