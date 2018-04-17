@@ -1,9 +1,17 @@
 module ImageHistogramTest
 
-export imhistogramGray, imhistogramRGB
+export imhistogramGray,
+    imhistogramRGB,
+    imhistogramRGB3d_new2,
+    plot_imhi,
+    plot_imhi_GrayRGB,
+    plot_imhi_3D
 
 using Images, Colors
-using Plots #  necessary to be able include a special function for ploting histograms
+using Plots #  necessary to be able include specials function for ploting histograms in 2D & 3D
+# using Gnuplot; # this is currently better for 3D plots, but one can load one package only.
+# ToDO: check if one can use 2 plot packages if they live in separate submodules. Mmaybe move into submodule 'imhi_plot3D' and 2D into submodule 'imhi_plot2D'
+# Worst case:  make individual modules, one for 2D, one for 3D plus a file for common code which will be included from the module files.
 
 #####
 # TWA 2018-03-22 : CustomUnitRanges is not usable with julia 0.6.2 for me ; ==> use OffsetArrays
@@ -19,7 +27,7 @@ using Plots #  necessary to be able include a special function for ploting histo
 # flame off
 #
 
-#= # begin{OffsetArray off}
+#=    ##### begin{OffsetArray off}
 using OffsetArrays
 t_oa = OffsetArray{Int32}(0:255); # defines an array with index 0 .. 255; values are not initialized
 summary(t_oa); # gives some info about t_oa
@@ -55,7 +63,7 @@ function conv_Offset_to_julia_Array(vma::OffsetArray)
     vma[0:end];
 end
 cOtjA(x) = conv_Offset_to_julia_Array(x); # short name for above
-=# # end{OffsetArray off}
+=#     ##### end{OffsetArray off}
 
     
 #####
@@ -121,29 +129,51 @@ function _imhistogram(array2D::T, ncolors) where T<:AbstractArray
 end # function histogram of gray image
 
 #####
+# Capacity of a FixedPointNumber
+#  Helper function, used in several functions; internal; not for export
+#  Colors of images are encoded as FixedPointNumber of type N0f8, N6f10, N4f12, ...
+#  The part after 'f' gives the number of bits 'nb' used per color.
+#  The number of shades per coler are given by 2^nb.
+function _capacity_of_FPNtype(array_elem)
+    # ToDo: currently assume 8-bit per pixel per color
+    # typname = string("t", zero(Gray(imarray[1]))); # string("t", zero(Gray.(imarray)));
+    typname = string("t", zero(Gray(array_elem)));
+    if searchindex(typname, "N0f8") > 0
+        ncolorshades = 2^8;
+        typref = N0f8;
+    elseif searchindex(typname, "N6f10") > 0
+        ncolorshades = 2^10;
+        typref = N6f10;
+    elseif searchindex(typname, "N4f12") > 0
+        ncolorshades = 2^12;
+        typref = N4f12;
+    elseif searchindex(typname, "N2f14") > 0
+        ncolorshades = 2^14;
+        typref = N2f14;
+    elseif searchindex(typname, "N0f16") > 0
+        ncolorshades = 2^16;
+        typref = N0f16;
+    else
+        println("WARNING: unknown FixedPointNumber type used");
+        ncolorshades = 369; # artifical value to make the result worse
+        typref = N0f16;
+    end # if searchindex(typname, "N0f8") > 0
+
+    return ncolorshades, typref;
+end # function _capacity_of_FPNtype(array_elem)
+
+
+#####
 # histogram of gray image
 # ToDo: simply convert Gray Image to 2d-array and call '_histogram'
 #    Gray.(img_col256)+0
 #
 #geht net: function imhistogram(imarray::AbstractArray{C}) where C<:AbstractGray
 function imhistogramGray(imarray::AbstractArray)
-    # ToDo: currently assume 8-bit per pixel per color
-    typname = string("t", zero(Gray(imarray[1]))); # string("t", zero(Gray.(imarray)));
-    if searchindex(typname, "N0f8") > 0
-        ncolors = 2^8;
-    elseif searchindex(typname, "N6f10") > 0
-        ncolors = 2^10;
-    elseif searchindex(typname, "N4f12") > 0
-        ncolors = 2^12;
-    elseif searchindex(typname, "N2f14") > 0
-        ncolors = 2^14;
-    elseif searchindex(typname, "N0f16") > 0
-        ncolors = 2^16;
-    else
-        ncolors = 369; # artifical value to make the result worse
-    end
-            
+    (ncolors, typref) = _capacity_of_FPNtype(Gray(imarray[1]));
+
     histo_gray = _imhistogram(Gray.(imarray), ncolors);
+    
     return histo_gray;
 end # function histogram of gray image
 
@@ -152,21 +182,7 @@ end # function histogram of gray image
 # returns 3 histograms
 #geht net: function imhistogram(imarray::AbstractArray{C}) where C<:AbstractRGB
 function imhistogramRGB(imarray::AbstractArray)
-    # ToDo: currently assume 8-bit per pixel per color
-    typname = string("t", zero(red(imarray[1]))); # string("t", zero(red.(imarray)));
-    if searchindex(typname, "N0f8") > 0
-        ncolors = 2^8;
-    elseif searchindex(typname, "N6f10") > 0
-        ncolors = 2^10;
-    elseif searchindex(typname, "N4f12") > 0
-        ncolors = 2^12;
-    elseif searchindex(typname, "N2f14") > 0
-        ncolors = 2^14;
-    elseif searchindex(typname, "N0f16") > 0
-        ncolors = 2^16;
-    else
-        ncolors = 369; # artifical value to make the result worse
-    end
+    (ncolors, typref) = _capacity_of_FPNtype(red(imarray[1]));
             
     histo_red   = _imhistogram(red.(imarray), ncolors);
     histo_green = _imhistogram(green.(imarray), ncolors);
@@ -175,27 +191,8 @@ function imhistogramRGB(imarray::AbstractArray)
     return histo_red, histo_green, histo_blue;
 end # function histogram of RGB image
 
-function imhistogramRGB3d(imarray::AbstractArray)
-    typname = string("t", zero(red(imarray[1]))); # string("t", zero(red.(imarray)));
-    if (typname == "tN0f8") # searchindex(typname, "N0f8") > 0
-        ncolors = 2^8;
-        typref = N0f8;
-    elseif searchindex(typname, "N6f10") > 0
-        ncolors = 2^10;
-        typref = N6f10;
-    elseif searchindex(typname, "N4f12") > 0
-        ncolors = 2^12;
-        typref = N4f12;
-    elseif searchindex(typname, "N2f14") > 0
-        ncolors = 2^14;
-        typref = N2f14;
-    elseif searchindex(typname, "N0f16") > 0
-        ncolors = 2^16;
-        typref = N0f16;
-    else
-        ncolors = 369; # artifical value to make the result worse
-        typref = N0f16;
-    end
+function imhistogramRGB3d_old(imarray::AbstractArray)
+    (ncolors, typref) = _capacity_of_FPNtype(red(imarray[1]));
 
     # 1st version
 #    red_vector   = reshape(red.(imarray), :) .* myfactor; # reshape(red.(imarray), :, 1) * myfactor;
@@ -247,29 +244,10 @@ function imhistogramRGB3d(imarray::AbstractArray)
     
 #    return red_ivector, green_ivector, blue_ivector, col_ivector;
     return red_cube_iv, green_cube_iv, blue_cube_iv, col_cube_iv;
-end # function imhistogramRGB3d of RGB image
+end # function imhistogramRGB3d_old of RGB image
 
 function imhistogramRGB3d_new2(imarray::AbstractArray)
-    typname = string("t", zero(red(imarray[1]))); # string("t", zero(red.(imarray)));
-    if (typname == "tN0f8") # searchindex(typname, "N0f8") > 0
-        ncolors = 2^8;
-        typref = N0f8;
-    elseif searchindex(typname, "N6f10") > 0
-        ncolors = 2^10;
-        typref = N6f10;
-    elseif searchindex(typname, "N4f12") > 0
-        ncolors = 2^12;
-        typref = N4f12;
-    elseif searchindex(typname, "N2f14") > 0
-        ncolors = 2^14;
-        typref = N2f14;
-    elseif searchindex(typname, "N0f16") > 0
-        ncolors = 2^16;
-        typref = N0f16;
-    else
-        ncolors = 369; # artifical value to make the result worse
-        typref = N0f16;
-    end
+    (ncolors, typref) = _capacity_of_FPNtype(red(imarray[1]));
 
     # 1st version
 #    red_vector   = reshape(red.(imarray), :) .* myfactor; # reshape(red.(imarray), :, 1) * myfactor;
@@ -339,6 +317,39 @@ function imhistogramRGB3d_new2(imarray::AbstractArray)
     return red_cube_iv, green_cube_iv, blue_cube_iv, col_cube_iv;
 end # function imhistogramRGB3d_new2 of RGB image
 
+#####
+# Helper used in function plot_imhi_3D()
+# It extracts the RGB24 color value and stores it in the output array.
+# This is understood as color to use for the related marker in plots
+gen_pcv(cv24_a)=(pcv24=zeros(length(cv24_a));for i = 1:endof(cv24_a); pcv24[i]=cv24_a[i].color; end;return pcv24)
+
+#####
+# How to do the 3D plot.
+# But encapsulation into one function does not work.
+# Thus, it is not possible to use 2 different plotting tools.
+# Try using sub-modules and try 'using' and 'import':  one for 2D another one for 3D
+# Else make an appropriate example.
+# 
+function plot_imhi_3D(imarray::AbstractArray; how::Int = 2, bg::Int = 0, range_step::Int = 50)
+#    using Gnuplot; # ToDO: maybe move into submodule 'imhi_plot3D' and 2D into submodule 'imhi_plot2D'
+    
+    redv, greenv, bluev, colv = ImageHistogramTest.imhistogramRGB3d_new2(imarray);
+
+    # convert FixedPontNumbers to plain numbers.  ToDo: extend to respect more than 8 bits per color
+    redv *= 255.0; greenv *= 255.0; bluev *= 255.0;
+
+    # the Gnuplot tools want simple RGB24 values encoded as 32bit ints.
+    # colv = gen_pcv(colv);
+    
+    # do the plot with Plots
+    # scatter3d(redv[1:50:end], greenv[1:50:end], bluev[1:50:end],color=colv[1:50:end], markersize=3,marker=:cross)
+    scatter3d(redv[1:range_step:end], greenv[1:range_step:end], bluev[1:range_step:end],color=colv[1:range_step:end], title="Color Cube with 3D Histogram, draft quality", grid = :all, markersize=3, marker=:cross)
+    
+    # do the plot with Gnuplot manually in case the arrays are larger than 3000 - 4000 elements each.
+    # @gp(splot=true,redv[1:10:end],greenv[1:10:end],bluev[1:10:end],gen_pcv(colv[1:10:end]),"with points pt 13 ps 0.7 lc rgb variable", xrange=(0,255), yrange=(0,255), zrange=(0,255), xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
+
+end # function plot_imhi_3D(imarray::AbstractArray; how::Int = 2, bg::Int = 0)
+
 function calc_histogram_norm_factor(ImHi1::AbstractArray, ImHi2::AbstractArray = [0], ImHi3::AbstractArray = [0], ImHi4::AbstractArray = [0])
     # calculat the norm-factor for the histograms.
     # expect 4 histograms : Gray, Red, Green, Blue
@@ -352,7 +363,7 @@ function calc_histogram_norm_factor(ImHi1::AbstractArray, ImHi2::AbstractArray =
     end
 
     return norm_factor_overall;
-end
+end # function calc_histogram_norm_factor(...)
 
 function normalize_histogram!(imhisto::AbstractArray, ih_nf = 0)
     # normalize the histogram
@@ -400,7 +411,7 @@ end # function normalize_histogram(imhisto_raw::AbstractArray, norm_type::Int = 
 function plot_imhi(;ihGray_cooked::AbstractArray = [0], ihR_cooked::AbstractArray = [0],
                    ihG_cooked::AbstractArray = [0], ihB_cooked::AbstractArray = [0],
                    how::Int = 4, bg::Int = 0)
-    #
+    # default to dark theme
     if (bg == 0)
         theme(:dark); # good for electronic media
         GrayShade=:lightgray;
@@ -438,8 +449,8 @@ function plot_imhi(;ihGray_cooked::AbstractArray = [0], ihR_cooked::AbstractArra
         pl_B = plot(ihB_cooked, ylims=(0,nf), color=:blue, w=3);
 
         plot(pl_Gray, pl_R, pl_G, pl_B, layout=(2,2), legend=false);
-    end
-end
+    end # if (how == 1)
+end # function plot_imhi(...)
 
 
 function plot_imhi_GrayRGB(imarray::AbstractArray; how::Int = 2, bg::Int = 0)
@@ -479,7 +490,8 @@ function plot_imhi_GrayRGB(imarray::AbstractArray; how::Int = 2, bg::Int = 0)
     
     plot using Plots:
     scatter3d(redv1, greenv1, bluev1, xlabel="red",ylabel="green",zlabel="blue"; color=colv1)
-    
+    scatter3d(redv[1:50:end], greenv[1:50:end], bluev[1:50:end],color=colv[1:50:end], markersize=3,marker=:cross)
+
     plot using GR:
     setmarkersize=1; setmarkertype(GR.MARKERTYPE_DOT)
     scatter3(redv1, greenv1, bluev1, xlabel="red",ylabel="green",zlabel="blue"; color=colv1)

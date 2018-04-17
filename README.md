@@ -1,18 +1,21 @@
+
 # Package ImageHistograms.jl
 Implement 2d and 3d histograms of images. Support gray and colored. Include support for plotting and some predefined layouts.
 
-## Goal [ToDo]
-* Check image if balanced: Low key, High key, Color balance
+## Goal and purpose
+Main purpose is to have a view to the color sitribution to check the quality of photos.
+And to have a reasonable sized window and not a little stamp.
+
 * 2d histograms
- + gray, red, green, blue
+    + gray, red, green, blue
 * 3d histogram
- + x-, y-, z-axis : derive from red, green, blue
- + plot using colored dots in RGB24 to get an impression of used color distribution within the image
+    + x-, y-, z-axis : derive from red, green, blue
+    + plot using colored dots in RGB24 to get an impression of used color distribution within the image
 * identify which Plt package is best for 3d plotting
- + current decison for purpose :  plot ImageHistograms
-  - Plots : very good for 2D plotting and customitzed layouts
-  - Gnuplot : very good for 3D plotting; in 2D it needs too much typing
-  - GR : out of the game. Found no syntax for RGB colored dots
+    + current decison for purpose :  plot ImageHistograms
+        - Plots : very good for 2D plotting and customitzed layouts
+        - Gnuplot : very good for 3D plotting; in 2D it needs too much typing
+        - GR : out of the game. Found no syntax for RGB colored dots
 
 ## Used Packages
 * julia as programming language
@@ -24,9 +27,10 @@ Implement 2d and 3d histograms of images. Support gray and colored. Include supp
 
 ## Package tree layout
 * directory src:
- + module "ImageHistogram" : contains the stable source. No cooked plotting
- + module "ImageHistogramTest" : contains the unstable source; use to try something, add new stuff, change existing, ...
-  - cooked plotting in 2D using Plots
+    + module "ImageHistogram" : contains the stable source. No cooked plotting
+    + module "ImageHistogramTest" : contains the unstable source; use to try something, add new stuff, change existing, ...
+        - cooked plotting in 2D using Plots
+        - cooked plotting in 3D using Gnuplot
 This way, source and runtime can be compared easily.
 
 ## Background Information and related URLs [ToDo]
@@ -40,11 +44,13 @@ Alternatively extend julia's load path to contain the directory the module files
 
 ImageHistogramTest contains functions trying to plot 3D using Plots.
 
-* use of ImageHistogram.jl
+### use of ImageHistogram.jl
 
+```
 using Images, TestImages ; reload("ImageHistogram") ; img_col256 = testimage("lena_color_256");
 
 ihR,ihG,ihB = ImageHistogramTest.imhistogramRGB(img_col256);
+
 ihgray = ImageHistogramTest.imhistogramGray(img_col256);
 
 plot(ihgray, color=:lightgray, w=3, line=:sticks)
@@ -52,13 +58,15 @@ plot(ihgray, color=:lightgray, w=3, line=:sticks)
 plot(ihR, line=:red, w=2)
 
 plot_red = plot(ihR, line=:red, w=2); plot_green = plot(ihG, line=:green, w=2); plot_blue = plot(ihB, line=:blue, w=2); plot_Gray = plot(ihgray, line=:lightgray, w=2);
+```
 
+### use of ImageHistogramTest.jl
 
-* use of ImageHistogramTest.jl
-
+```
 using Images, TestImages ; reload("ImageHistogramTest") ; img_col256 = testimage("mandril_color");
 
 ihR,ihG,ihB = ImageHistogramTest.imhistogramRGB(img_col256);
+
 ihgray = ImageHistogramTest.imhistogramGray(img_col256);
 
 ImageHistogramTest.plot_imhi(ihR_cooked=ihR, ihG_cooked=ihG, ihB_cooked=ihB,how=1,bg=1)
@@ -71,8 +79,10 @@ ImageHistogramTest.plot_imhi(ihGray_cooked=ihgray,ihR_cooked=ihR, ihG_cooked=ihG
 ImageHistogramTest.plot_imhi_GrayRGB(img_col256)
 
 ImageHistogramTest.plot_imhi_GrayRGB(img_col256, how=3, bg=0)
+```
 
-** Plotting 3D: a color cube
+## Plotting 3D: a color cube
+### ... with package Gnuplot
 
 manually checkout commit  1665b78a54a0b67ce6b61c2b8ebfe0f409a47ae4 from Gnuplot.jl
 
@@ -83,11 +93,13 @@ manually checkout commit  56b64fcef797cc337eb2d589edf5e95a9abd37f5 from Gnuplot.
 starting with commit 6a4e95f377e3da76026731a99f2c6a918cd87fe8 from Gnuplot.jl 'splot' stops working
 
 using Gnuplot;
+
 using Images, TestImages ; reload("ImageHistogram") ; img_col256 = testimage("lena_color_512");
 
 redv, greenv,bluev, colv = ImageHistogramTest.imhistogramRGB3d_new2(img_col256);
 
 redv=redv*255.0; greenv=greenv*255.0; bluev=bluev*255.0;
+
 gen_pcv(cv24_a)=(pcv24=zeros(length(cv24_a));for i = 1:endof(cv24_a); pcv24[i]=cv24_a[i].color; end;return pcv24)
 
 @gp(splot=true,redv[1:10:end],greenv[1:10:end],bluev[1:10:end],gen_pcv(colv[1:10:end]),"with points pt 13 ps 0.7 lc rgb variable", xrange=(0,255), yrange=(0,255), zrange=(0,255), xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
@@ -95,6 +107,32 @@ gen_pcv(cv24_a)=(pcv24=zeros(length(cv24_a));for i = 1:endof(cv24_a); pcv24[i]=c
 After hitting the return-key, be patient for a few seconds. Especially if you use the full range of the color arrays. Each has a size of 148279.
 
 Doing the same with "mandril_color" has much less colors and color spots than smooth distribution.
+
+### ... with package Plots
+
+With GR as backend.
+Ensure to feed scatter3d() with less than 3000 - 4000 points per color.  It is too slow and it may die.
+
+```
+using Plots;
+
+using Images, TestImages ; reload("ImageHistogram") ; img_col256 = testimage("lena_color_512");
+
+redv, greenv,bluev, colv = ImageHistogramTest.imhistogramRGB3d_new2(img_col256);
+
+redv=redv*255.0; greenv=greenv*255.0; bluev=bluev*255.0;
+
+gen_pcv(cv24_a)=(pcv24=zeros(length(cv24_a));for i = 1:endof(cv24_a); pcv24[i]=cv24_a[i].color; end;return pcv24)
+
+scatter3d(redv[1:50:end], greenv[1:50:end], bluev[1:50:end],color=colv[1:50:end], markersize=3,marker=:cross)
+```
+or just call
+
+```
+ImageHistogramTest.plot_imhi_3D(img_col256)
+```
+
+to create a draft 3D histogram.
 
 Hints for improvements are welcome via tickets, pull requests, ...
 
