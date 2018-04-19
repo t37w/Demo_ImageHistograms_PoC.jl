@@ -84,14 +84,9 @@ ImageHistogramTest.plot_imhi_GrayRGB(img_col256, how=3, bg=0)
 ## Plotting 3D: a color cube
 ### ... with package Gnuplot
 
-manually checkout commit  1665b78a54a0b67ce6b61c2b8ebfe0f409a47ae4 from Gnuplot.jl
+With the new Gnuplot.jl verion 0.2.0, doing splot based stuff is easier, and works well.
 
-  or
-
-manually checkout commit  56b64fcef797cc337eb2d589edf5e95a9abd37f5 from Gnuplot.jl
-
-starting with commit 6a4e95f377e3da76026731a99f2c6a918cd87fe8 from Gnuplot.jl 'splot' stops working
-
+```
 using Gnuplot;
 
 using Images, TestImages ; reload("ImageHistogram") ; img_col256 = testimage("lena_color_512");
@@ -102,7 +97,8 @@ redv=redv*255.0; greenv=greenv*255.0; bluev=bluev*255.0;
 
 gen_pcv(cv24_a)=(pcv24=zeros(length(cv24_a));for i = 1:endof(cv24_a); pcv24[i]=cv24_a[i].color; end;return pcv24)
 
-@gp(splot=true,redv[1:10:end],greenv[1:10:end],bluev[1:10:end],gen_pcv(colv[1:10:end]),"with points pt 13 ps 0.7 lc rgb variable", xrange=(0,255), yrange=(0,255), zrange=(0,255), xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
+@gsp(redv[1:10:end],greenv[1:10:end],bluev[1:10:end],gen_pcv(colv[1:10:end]),"with points pt 13 ps 0.7 lc rgb variable", xrange=(0,255), yrange=(0,255), zrange=(0,255), xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
+```
 
 After hitting the return-key, be patient for a few seconds. Especially if you use the full range of the color arrays. Each has a size of 148279.
 
