@@ -118,14 +118,15 @@ redv, greenv,bluev, colv = ImageHistogramTest.imhistogramRGB3d_new2(img_col256);
 
 redv=redv*255.0; greenv=greenv*255.0; bluev=bluev*255.0;
 
-gen_pcv(cv24_a)=(pcv24=zeros(length(cv24_a));for i = 1:endof(cv24_a); pcv24[i]=cv24_a[i].color; end;return pcv24)
-
-scatter3d(redv[1:50:end], greenv[1:50:end], bluev[1:50:end],color=colv[1:50:end], markersize=3,marker=:cross)
+scatter3d(redv[1:50:end], greenv[1:50:end], bluev[1:50:end],color=colv[1:50:end], markerstrokewidth=0, markersize=2,marker=:circle) ; # set border of marker symbol to zero with 'markerstrokewidth=0'
 ```
 or just call
 
 ```
-ImageHistogramTest.plot_imhi_3D(img_col256)
+ImageHistogramTest.plot_imhi_3D(img_col256); # with default range_step = 50, i.e. just take each 50s point
+
+ImageHistogramTest.plot_imhi_3D(img_col256, range_step = 30); # 
+ImageHistogramTest.plot_imhi_3D(img_col256, range_step = 1); # take each color value; requires much mem; on Windows best after a re-boot
 ```
 
 to create a draft 3D histogram.

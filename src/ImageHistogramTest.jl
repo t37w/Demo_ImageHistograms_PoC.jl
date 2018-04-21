@@ -240,6 +240,8 @@ function imhistogramRGB3d_old(imarray::AbstractArray)
     # now this can be plotted as 3D using gnuplot from julia
     # with the command
     #   @gp(splot=true,redv[:],greenv[:],bluev[:],colv[:],"with points pt 13 ps 0.7 lc rgb variable")
+    # since Gnuplot.jl v0.2.0
+    #   @gsp(redv[7:10:end],greenv[7:10:end],bluev[7:10:end],gen_pcv(colv[7:10:end]),"with points pt 13 ps 0.7 lc rgb variable", xrange=(0,255), yrange=(0,255), zrange=(0,255), xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
                          
     
 #    return red_ivector, green_ivector, blue_ivector, col_ivector;
@@ -297,7 +299,7 @@ function imhistogramRGB3d_new2(imarray::AbstractArray)
     #     !!!! the syntax is not accepted any more !!!!
     #     !!!! splot wants a function instead of data !!!!
     #
-    # !!!!! Intermediate Solution !!!!!
+    # !!!!! Intermediate Solution no longer necessary; new Gnuplot.jl v-0.2.0 !!!!!
     # manually checkout commit  1665b78a54a0b67ce6b61c2b8ebfe0f409a47ae4  from Gnuplot.jl
     #
     # manually checkout commit  56b64fcef797cc337eb2d589edf5e95a9abd37f5  from Gnuplot.jl
@@ -312,6 +314,9 @@ function imhistogramRGB3d_new2(imarray::AbstractArray)
     # @gp("set hidden3d", "set grid", "splot 'data3d.txt' using 1:2:3 with points pt 13 ps 0.7 lc rgb variable")
     # @gp("set grid; set xlabel 'red'; set ylabel 'green'; set zlabel 'blue'", "splot 'data3d.txt' using 1:2:3 with points pt 13 ps 0.7 lc rgb variable")
     # still not possible to splot data. Worked last year !!!
+
+    # since Gnuplot.jl v0.2.0
+    #  @gsp(redv[7:10:end],greenv[7:10:end],bluev[7:10:end],gen_pcv(colv[7:10:end]),"with points pt 13 ps 0.7 lc rgb variable", xrange=(0,255), yrange=(0,255), zrange=(0,255), xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
     
 #    return red_ivector, green_ivector, blue_ivector, col_ivector;
     return red_cube_iv, green_cube_iv, blue_cube_iv, col_cube_iv;
@@ -330,9 +335,18 @@ gen_pcv(cv24_a)=(pcv24=zeros(length(cv24_a));for i = 1:endof(cv24_a); pcv24[i]=c
 # Try using sub-modules and try 'using' and 'import':  one for 2D another one for 3D
 # Else make an appropriate example.
 # 
-function plot_imhi_3D(imarray::AbstractArray; how::Int = 2, bg::Int = 0, range_step::Int = 50)
+function plot_imhi_3D(imarray::AbstractArray; bg::Int = 0, range_step::Int = 50)
 #    using Gnuplot; # ToDO: maybe move into submodule 'imhi_plot3D' and 2D into submodule 'imhi_plot2D'
     
+    # default to dark theme; for 3D it looks funny, but still better to read
+    if (bg == 0)
+        theme(:dark); # good for electronic media
+        GrayShade=:lightgray;
+    else
+        theme(:default); # good for paper
+        GrayShade=:gray71;
+    end        
+
     redv, greenv, bluev, colv = ImageHistogramTest.imhistogramRGB3d_new2(imarray);
 
     # convert FixedPontNumbers to plain numbers.  ToDo: extend to respect more than 8 bits per color
@@ -343,10 +357,15 @@ function plot_imhi_3D(imarray::AbstractArray; how::Int = 2, bg::Int = 0, range_s
     
     # do the plot with Plots
     # scatter3d(redv[1:50:end], greenv[1:50:end], bluev[1:50:end],color=colv[1:50:end], markersize=3,marker=:cross)
-    scatter3d(redv[1:range_step:end], greenv[1:range_step:end], bluev[1:range_step:end],color=colv[1:range_step:end], title="Color Cube with 3D Histogram, draft quality", grid = :all, markersize=3, marker=:cross)
+    # scatter3d(redv[1:range_step:end], greenv[1:range_step:end], bluev[1:range_step:end],color=colv[1:range_step:end], title="Color Cube with 3D Histogram, draft quality", grid = :all, markersize=3, marker=:cross)
+
+    # With the hints of 'mkborregaard' (JuliaPlots member); thanks
+    scatter3d(redv[1:range_step:end], greenv[1:range_step:end], bluev[1:range_step:end],color=colv[1:range_step:end], title="Color Cube with 3D RGB-Histogram, draft quality", grid = :all, markerstrokewidth = 0, markersize = 2, marker=:circle); # disable border of marker with 'markerstrokewidth = 0'
     
     # do the plot with Gnuplot manually in case the arrays are larger than 3000 - 4000 elements each.
     # @gp(splot=true,redv[1:10:end],greenv[1:10:end],bluev[1:10:end],gen_pcv(colv[1:10:end]),"with points pt 13 ps 0.7 lc rgb variable", xrange=(0,255), yrange=(0,255), zrange=(0,255), xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
+    # since Gnuplot.jl v0.2.0
+    #  @gsp(redv[7:10:end],greenv[7:10:end],bluev[7:10:end],gen_pcv(colv[7:10:end]),"with points pt 13 ps 0.7 lc rgb variable", xrange=(0,255), yrange=(0,255), zrange=(0,255), xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
 
 end # function plot_imhi_3D(imarray::AbstractArray; how::Int = 2, bg::Int = 0)
 
