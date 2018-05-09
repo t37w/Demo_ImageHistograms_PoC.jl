@@ -1,8 +1,12 @@
 module ImageHistogramTest
 
-export imhistogramGray,
+export
+    calc_histogram_norm_factor,
+    imhistogramGray,
     imhistogramRGB,
+    imhistogramRGB3d_16bit,
     imhistogramRGB3d_new2,
+    normalize_histogram,
     plot_imhi,
     plot_imhi_GrayRGB,
     plot_imhi_3D
@@ -51,7 +55,7 @@ _size(A) = size(A)
 _length(A::AbstractArray) = length(linearindices(A))
 _length(A) = length(A)
 
-    
+
 #####
 # convert OffsetArray to Julia array
 # flame on
@@ -65,7 +69,7 @@ end
 cOtjA(x) = conv_Offset_to_julia_Array(x); # short name for above
 =#     ##### end{OffsetArray off}
 
-    
+
 #####
 # convert sRGB (non-linear) to linearRGB (also used for sRGB to XYZ)
 function linearRGB_from_sRGB(v)
@@ -118,13 +122,14 @@ function _imhistogram(array2D::T, ncolors) where T<:AbstractArray
     ihist = zeros(Int32, ncolors); # zeros(UInt16, ncolors) or zeros(Int32, ncolors);
     # ihist = zeros(OffsetArray(UInt16, 0:ncolorsteps));
     for p in array2D
+        # channel = Int32(floor(p * ncolorsteps));
         #channel = floor(UInt16, p * ncolorsteps); # using julia-0.6.2 : OK with RGB ; FAIL with Gray
         channel = UInt16(floor(p * ncolorsteps)); # using julia-0.6.2 : OK with Gray and RGB
 
         ihist[channel+1] += 1; # Bugfix : use 'channel+1' as channel can be 0 if no color. max(channel) is <= 255 for 'N0f8'
         #ihist[channel] += 1; # using OffsetArray the channel of black is a valid index
     end # for p
-    
+
     return ihist;
 end # function histogram of gray image
 
@@ -173,7 +178,7 @@ function imhistogramGray(imarray::AbstractArray)
     (ncolors, typref) = _capacity_of_FPNtype(Gray(imarray[1]));
 
     histo_gray = _imhistogram(Gray.(imarray), ncolors);
-    
+
     return histo_gray;
 end # function histogram of gray image
 
@@ -183,7 +188,7 @@ end # function histogram of gray image
 #geht net: function imhistogram(imarray::AbstractArray{C}) where C<:AbstractRGB
 function imhistogramRGB(imarray::AbstractArray)
     (ncolors, typref) = _capacity_of_FPNtype(red(imarray[1]));
-            
+
     histo_red   = _imhistogram(red.(imarray), ncolors);
     histo_green = _imhistogram(green.(imarray), ncolors);
     histo_blue  = _imhistogram(blue.(imarray), ncolors);
@@ -191,7 +196,11 @@ function imhistogramRGB(imarray::AbstractArray)
     return histo_red, histo_green, histo_blue;
 end # function histogram of RGB image
 
-function imhistogramRGB3d_old(imarray::AbstractArray)
+function imhistogramRGB3d_16bit(imarray::AbstractArray)
+    # previous name of this func:  imhistogramRGB3d_old
+    # use this function to support images with more than 8bits per color channel til package 'Colors' supports RGB48.
+    # But the function will always support 8bits.  At least for speed tests, ...
+
     (ncolors, typref) = _capacity_of_FPNtype(red(imarray[1]));
 
     # 1st version
@@ -199,14 +208,14 @@ function imhistogramRGB3d_old(imarray::AbstractArray)
 #    green_vector = reshape(green.(imarray), :) .* myfactor; # reshape(green.(imarray), :, 1) * myfactor;
 #    blue_vector  = reshape(blue.(imarray), :) .* myfactor; # reshape(blue.(imarray), :, 1) * myfactor;
 #    col_vector   = reshape(RGB24.(imarray), :); # reshape(RGB24.(imarray), :, 1);
-    
+
     # make as 1 dim array
     red_vector   = reshape(red.(imarray), :); # reshape(red.(imarray), :, 1) * myfactor;
     green_vector = reshape(green.(imarray), :); # reshape(green.(imarray), :, 1) * myfactor;
     blue_vector  = reshape(blue.(imarray), :); # reshape(blue.(imarray), :, 1) * myfactor;
 
     # convert to ...
-    if searchindex(typname, "N0f8") > 0
+    if ncolors == 2^8 # searchindex(typname, "N0f8") > 0
         # ... 8-bit int
         red_ivector   = reinterpret.(N0f8.(red_vector));
         green_ivector = reinterpret.(N0f8.(green_vector));
@@ -220,11 +229,27 @@ function imhistogramRGB3d_old(imarray::AbstractArray)
         red_cube_iv   = (col_cube_iv .& 0x00ff0000) .>> 16;
         green_cube_iv = (col_cube_iv .& 0x0000ff00) .>> 8;
         blue_cube_iv  = (col_cube_iv .& 0x000000ff);
-    else
+    else # all colors here use 16bit for storage, but they may use not the full range.
         # ... 16-bit int ; currently raw images have 10, 12 or 14 bits per color, some image tools work with 16 bit
-        red_ivector   = reinterpret.(N0f16.(red_vector));
-        green_ivector = reinterpret.(N0f16.(green_vector));
-        blue_ivector  = reinterpret.(N0f16.(blue_vector));
+        # Depending on the used camera, one can have 10bit, 12bit or 14bit pictures.
+
+        if ncolors == 2^10 # N6f10
+            red_ivector   = reinterpret.(N6f10.(red_vector));
+            green_ivector = reinterpret.(N6f10.(green_vector));
+            blue_ivector  = reinterpret.(N6f10.(blue_vector));
+        elseif ncolors == 2^12 # N4f12
+            red_ivector   = reinterpret.(N4f12.(red_vector));
+            green_ivector = reinterpret.(N4f12.(green_vector));
+            blue_ivector  = reinterpret.(N4f12.(blue_vector));
+        elseif ncolors == 2^14 # N2f14
+            red_ivector   = reinterpret.(N2f14.(red_vector));
+            green_ivector = reinterpret.(N2f14.(green_vector));
+            blue_ivector  = reinterpret.(N2f14.(blue_vector));
+        elseif ncolors == 2^16 # N0f16
+            red_ivector   = reinterpret.(N0f16.(red_vector));
+            green_ivector = reinterpret.(N0f16.(green_vector));
+            blue_ivector  = reinterpret.(N0f16.(blue_vector));
+        end # if ncolors == 2^10 # N6f10
 
         col_ivector = (red_ivector .% UInt64) .<< 32 .+ (green_ivector .% UInt64) .<< 16 .+ (blue_ivector .% UInt64);
 
@@ -234,29 +259,44 @@ function imhistogramRGB3d_old(imarray::AbstractArray)
         red_cube_iv   = (col_cube_iv .& 0x0000ffff00000000) .>> 32;
         green_cube_iv = (col_cube_iv .& 0x00000000ffff0000) .>> 16;
         blue_cube_iv  = (col_cube_iv .& 0x000000000000ffff);
-    end
-    
+    end # if ncolors == 2^8 # searchindex(typname, "N0f8") > 0
+
 
     # now this can be plotted as 3D using gnuplot from julia
     # with the command
-    #   @gp(splot=true,redv[:],greenv[:],bluev[:],colv[:],"with points pt 13 ps 0.7 lc rgb variable")
+    #   @gp(splot=true, redv[:], greenv[:], bluev[:], colv[:], "with points pt 13 ps 0.7 lc rgb variable")
     # since Gnuplot.jl v0.2.0
-    #   @gsp(redv[7:10:end],greenv[7:10:end],bluev[7:10:end],gen_pcv(colv[7:10:end]),"with points pt 13 ps 0.7 lc rgb variable", xrange=(0,255), yrange=(0,255), zrange=(0,255), xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
-                         
-    
+    #   @gsp(redv[7:10:end], greenv[7:10:end], bluev[7:10:end], gen_pcv(colv[7:10:end]), "with points pt 13 ps 0.7 lc rgb variable", xrange=(0,255), yrange=(0,255), zrange=(0,255), xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
+
+    # to plot this with Plots
+    # keep red_cube_iv, green_cube_iv, blue_cube_iv as is
+    # convert col_cube_iv with
+    #    colv_new=(RGB24.(N0f8.(UInt8.(redv)/255), N0f8.(UInt8.(greenv)/255), N0f8.(UInt8.(bluev)/255)))
+    # then this can be plotted with
+    #    scatter3d(redv[140000:1:end], greenv[140000:1:end], bluev[140000:1:end], color=colv_new[140000:1:end], ms=1, msw=0, marker=1, xlims=(0,255), ylims=(0,255), bg=:blue)
+
 #    return red_ivector, green_ivector, blue_ivector, col_ivector;
     return red_cube_iv, green_cube_iv, blue_cube_iv, col_cube_iv;
-end # function imhistogramRGB3d_old of RGB image
+end # function imhistogramRGB3d_16bit of RGB image
 
 function imhistogramRGB3d_new2(imarray::AbstractArray)
+    # previous name of this func:  imhistogramRGB3d_new2
     (ncolors, typref) = _capacity_of_FPNtype(red(imarray[1]));
+
+    if (ncolors > 256)
+        println("Sorry, this function supports 8-bits per color channel only !!!");
+        println("Please call / use function 'imhistogramRGB3d_16bit(imarray::AbstractArray)' !!!");
+
+        # return red_cube_iv, green_cube_iv, blue_cube_iv, col_cube_iv;
+        return [0], [0], [0], [0];
+    end # if (ncolors > 256)
 
     # 1st version
 #    red_vector   = reshape(red.(imarray), :) .* myfactor; # reshape(red.(imarray), :, 1) * myfactor;
 #    green_vector = reshape(green.(imarray), :) .* myfactor; # reshape(green.(imarray), :, 1) * myfactor;
 #    blue_vector  = reshape(blue.(imarray), :) .* myfactor; # reshape(blue.(imarray), :, 1) * myfactor;
 #    col_vector   = reshape(RGB24.(imarray), :); # reshape(RGB24.(imarray), :, 1);
-    
+
     # make as 1 dim array
     #red_vector   = reshape(red.(imarray), :); # reshape(red.(imarray), :, 1) * myfactor;
     #green_vector = reshape(green.(imarray), :); # reshape(green.(imarray), :, 1) * myfactor;
@@ -271,8 +311,8 @@ function imhistogramRGB3d_new2(imarray::AbstractArray)
     # calling sort() with the special isless() related to RGB24 reduced used mem and time
     # and then use sort!() for another improvement
     col_vector  = reshape(RGB24.(imarray), :); # println(col_vector);
-    col_cube_iv = unique(sort!(col_vector, lt = (x,y)->isless(x.color,y.color)));
-    
+    col_cube_iv = unique(sort!(col_vector, lt = (x, y)->isless(x.color, y.color)));
+
     red_cube_iv   = red.(col_cube_iv);
     green_cube_iv = green.(col_cube_iv);
     blue_cube_iv  = blue.(col_cube_iv);
@@ -280,12 +320,12 @@ function imhistogramRGB3d_new2(imarray::AbstractArray)
 
     # now this can be plotted as 3D using gnuplot from julia
     # with the command
-    #   @gp(splot=true,redv[:],greenv[:],bluev[:],colv[:],"with points pt 13 ps 0.7 lc rgb variable")
+    #   @gp(splot=true, redv[:], greenv[:], bluev[:], colv[:], "with points pt 13 ps 0.7 lc rgb variable")
     #
     #   much better
-    # @gp(splot=true,redv[:],greenv[:],bluev[:],gen_pcv(colv[:]),"with points pt 13 ps 0.7 lc rgb variable", xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
+    # @gp(splot=true, redv[:], greenv[:], bluev[:], gen_pcv(colv[:]), "with points pt 13 ps 0.7 lc rgb variable", xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
     #
-    # @gp(splot=true,redv[1:10:end],greenv[1:10:end],bluev[1:10:end],gen_pcv(colv[1:10:end]),"with points pt 13 ps 0.7 lc rgb variable", xrange=(0,255), yrange=(0,255), zrange=(0,255), xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
+    # @gp(splot=true, redv[1:10:end], greenv[1:10:end], bluev[1:10:end], gen_pcv(colv[1:10:end]), "with points pt 13 ps 0.7 lc rgb variable", xrange=(0,255), yrange=(0,255), zrange=(0,255), xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
     #
     # befor plotting with gnuplot, some crafting is necessary
     # 1) convert colv using
@@ -316,14 +356,14 @@ function imhistogramRGB3d_new2(imarray::AbstractArray)
     # still not possible to splot data. Worked last year !!!
 
     # since Gnuplot.jl v0.2.0
-    #  @gsp(redv[7:10:end],greenv[7:10:end],bluev[7:10:end],gen_pcv(colv[7:10:end]),"with points pt 13 ps 0.7 lc rgb variable", xrange=(0,255), yrange=(0,255), zrange=(0,255), xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
-    
+    #  @gsp(redv[7:10:end], greenv[7:10:end], bluev[7:10:end], gen_pcv(colv[7:10:end]), "with points pt 13 ps 0.7 lc rgb variable", xrange=(0,255), yrange=(0,255), zrange=(0,255), xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
+
 #    return red_ivector, green_ivector, blue_ivector, col_ivector;
     return red_cube_iv, green_cube_iv, blue_cube_iv, col_cube_iv;
 end # function imhistogramRGB3d_new2 of RGB image
 
 #####
-# Helper used in function plot_imhi_3D()
+# Helper used in function plot_imhi_3D().  Needed to pass the RGB24 colors to Gnuplot.
 # It extracts the RGB24 color value and stores it in the output array.
 # This is understood as color to use for the related marker in plots
 gen_pcv(cv24_a)=(pcv24=zeros(length(cv24_a));for i = 1:endof(cv24_a); pcv24[i]=cv24_a[i].color; end;return pcv24)
@@ -334,46 +374,49 @@ gen_pcv(cv24_a)=(pcv24=zeros(length(cv24_a));for i = 1:endof(cv24_a); pcv24[i]=c
 # Thus, it is not possible to use 2 different plotting tools.
 # Try using sub-modules and try 'using' and 'import':  one for 2D another one for 3D
 # Else make an appropriate example.
-# 
+#
 function plot_imhi_3D(imarray::AbstractArray; bg::Int = 0, range_step::Int = 50)
 #    using Gnuplot; # ToDO: maybe move into submodule 'imhi_plot3D' and 2D into submodule 'imhi_plot2D'
-    
+
     # default to dark theme; for 3D it looks funny, but still better to read
-    if (bg == 0)
-        theme(:dark); # good for electronic media
-        GrayShade=:lightgray;
-    else
-        theme(:default); # good for paper
-        GrayShade=:gray71;
-    end        
+    # Hmm PlotTheme broken since 2018-04-21 ~22:00
+#    if (bg == 0)
+#        theme(:dark); # good for electronic media
+#        GrayShade=:lightgray;
+#    else
+#        theme(:default); # good for paper
+#        GrayShade=:gray71;
+#    end
 
     redv, greenv, bluev, colv = ImageHistogramTest.imhistogramRGB3d_new2(imarray);
 
-    # convert FixedPontNumbers to plain numbers.  ToDo: extend to respect more than 8 bits per color
-    redv *= 255.0; greenv *= 255.0; bluev *= 255.0;
+    # convert FixedPontNumbers to plain numbers. They are used as coordinates in 3D.
+    # ToDo: extend to respect more than 8 bits per color
+    max_color_value = 2^8 - 1.0; # need a float as result
+    redv *= max_color_value; greenv *= max_color_value; bluev *= max_color_value;
 
     # the Gnuplot tools want simple RGB24 values encoded as 32bit ints.
     # colv = gen_pcv(colv);
-    
+
     # do the plot with Plots
-    # scatter3d(redv[1:50:end], greenv[1:50:end], bluev[1:50:end],color=colv[1:50:end], markersize=3,marker=:cross)
-    # scatter3d(redv[1:range_step:end], greenv[1:range_step:end], bluev[1:range_step:end],color=colv[1:range_step:end], title="Color Cube with 3D Histogram, draft quality", grid = :all, markersize=3, marker=:cross)
+    # scatter3d(redv[1:50:end], greenv[1:50:end], bluev[1:50:end], color=colv[1:50:end], markersize=3, marker=:cross)
+    # scatter3d(redv[1:range_step:end], greenv[1:range_step:end], bluev[1:range_step:end], color=colv[1:range_step:end], title="Color Cube with 3D Histogram, draft quality", grid = :all, markersize=3, marker=:cross)
 
     # With the hints of 'mkborregaard' (JuliaPlots member); thanks
-    scatter3d(redv[1:range_step:end], greenv[1:range_step:end], bluev[1:range_step:end],color=colv[1:range_step:end], title="Color Cube with 3D RGB-Histogram, draft quality", grid = :all, markerstrokewidth = 0, markersize = 2, marker=:circle); # disable border of marker with 'markerstrokewidth = 0'
-    
+    scatter3d(redv[1:range_step:end], greenv[1:range_step:end], bluev[1:range_step:end], color=colv[1:range_step:end], title="Color Cube with 3D RGB-Histogram, draft quality", xlims=(0,255), ylims=(0,255), zlims=(0,255), grid = :all, markerstrokewidth = 0, markersize = 0.1, bg = :black, camera = (60, 60), marker=:circle)  # disable border of marker with 'markerstrokewidth = 0'
+
     # do the plot with Gnuplot manually in case the arrays are larger than 3000 - 4000 elements each.
-    # @gp(splot=true,redv[1:10:end],greenv[1:10:end],bluev[1:10:end],gen_pcv(colv[1:10:end]),"with points pt 13 ps 0.7 lc rgb variable", xrange=(0,255), yrange=(0,255), zrange=(0,255), xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
+    # @gp(splot=true, redv[1:10:end], greenv[1:10:end], bluev[1:10:end], gen_pcv(colv[1:10:end]), "with points pt 13 ps 0.7 lc rgb variable", xrange=(0,255), yrange=(0,255), zrange=(0,255), xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
     # since Gnuplot.jl v0.2.0
-    #  @gsp(redv[7:10:end],greenv[7:10:end],bluev[7:10:end],gen_pcv(colv[7:10:end]),"with points pt 13 ps 0.7 lc rgb variable", xrange=(0,255), yrange=(0,255), zrange=(0,255), xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
+    #  @gsp(redv[7:10:end], greenv[7:10:end], bluev[7:10:end], gen_pcv(colv[7:10:end]), "with points pt 13 ps 0.7 lc rgb variable", xrange=(0,255), yrange=(0,255), zrange=(0,255), xlabel="red", ylabel="green", zlabel="blue", "set border -1", "set tics in mirror", "set grid", "set zticks out mirror", "set grid ztics", "set xyplane at 0.0")
 
 end # function plot_imhi_3D(imarray::AbstractArray; how::Int = 2, bg::Int = 0)
 
 function calc_histogram_norm_factor(ImHi1::AbstractArray, ImHi2::AbstractArray = [0], ImHi3::AbstractArray = [0], ImHi4::AbstractArray = [0])
     # calculat the norm-factor for the histograms.
-    # expect 4 histograms : Gray, Red, Green, Blue
+    # expect up to 4 histograms : Gray, Red, Green, Blue
     # the order does not matter, thus name it 1 2 3 4
-    # at minimum, one histogram with data must be given
+    # at minimum, one histogram - the 1st -  with data must be given via 'ImHi1'.
 
     if length(ImHi1) != 0
         norm_factor_overall = max(maximum(ImHi1), maximum(ImHi2), maximum(ImHi3), maximum(ImHi4));
@@ -384,7 +427,9 @@ function calc_histogram_norm_factor(ImHi1::AbstractArray, ImHi2::AbstractArray =
     return norm_factor_overall;
 end # function calc_histogram_norm_factor(...)
 
-function normalize_histogram!(imhisto::AbstractArray, ih_nf = 0)
+#=
+# No.  In most cases input and output type differ
+function normalize_histogram!(imhisto::AbstractArray, ih_nf = 0.0)
     # normalize the histogram
     #   ih_nf := 0 => max of all channels is set to 1
     #   ih_nf > 0 => use as scale factor
@@ -398,31 +443,68 @@ function normalize_histogram!(imhisto::AbstractArray, ih_nf = 0)
     if (ih_nf != 0)
         norm_factor = ih_nf;
     else
-        norm_factor = maximum(imhisto);
+        norm_factor = typeof(ih_nf)(maximum(imhisto));
     end
 
-    for i = 1:endof(imhisto) # ToDo: julia-0.6.2 notation
+    for i = 1:endof(imhisto) # ToDo: change julia-0.6.2 notation to julia-0.7.0 notation if the latter is public.
         imhisto[i] /= norm_factor;
     end
 
-    return imhisto;    
-end # function normalize_histogram(imhisto_raw::AbstractArray, norm_type::Int = 1)
+    return imhisto;
+end # function normalize_histogram!(imhisto_raw::AbstractArray, ih_nf = 0.0)
+=#
 
-function normalize_histogram(imhisto_raw::AbstractArray, ih_nf = 0)
+function normalize_histogram(imhisto_raw::AbstractArray, ih_nf::Real = 0.0)
     # normalize the histogram
+    #   ih_nf := 0 => max of all channels is set to 1
+    #   ih_nf > 0 => use as scale factor
+    #
+    # the output is always an array of reals. Thus in most cases different from input.
+    # => no normalize_histogram!()-function
 
-    imhisto_normed = copy(imhisto_raw);
-
-    if (ih_nf != 0)
+    if (ih_nf != zero(ih_nf))
         norm_factor = ih_nf;
     else
-        norm_factor = maximum(imhisto);
+        norm_factor = typeof(ih_nf)(maximum(imhisto_raw));
     end
 
-    imhisto_normed /= norm_factor;
-    
-    return imhisto_normed;    
-end # function normalize_histogram(imhisto_raw::AbstractArray, norm_type::Int = 1)
+    imhisto_normed = imhisto_raw / norm_factor;
+
+    return imhisto_normed;
+end # function normalize_histogram(imhisto_raw::AbstractArray, ih_nf::Real = 0.0)
+
+function combine_color_slots(imhisto_in::AbstractArray, nslots::Int = 0)
+    # imhisto_in :== input of a histogram. It is a 1D array
+    # nslots :== how much color slots shall be combined
+    #      0 : auto (do nothing for histograms of 8 bit colors having a length of 256)
+    #          if larger than 1024 scale down.
+    #     >0 : combine. Best if a power of 2.
+
+    if (mod(nslots, 2) != 0)
+        println("Number of color slots to combine is best if a pwer of 2");
+        println("You feed me with something else, be sure you know what you are doing");
+    end
+
+    imhisto_out = zeros(imhisto_in);
+    len_ih_in = length(imhisto_in);
+
+    if (nslots == 0)
+        if (len_ih_in > 1024) # 2^10
+            nslots = div(len_ih_in, 1024);
+        else
+            nslots = 1;
+        end
+    else
+        nslots = abs(nslots);
+        if (nslots > len_ih_in)
+            println("The given 'nslots' is larger than the length of the histogram => using 1 instead");
+        end
+    end
+
+    for i = 1:len_ih_in
+        imhisto_out[div(i, nslots)] += imhisto_in[i];
+    end
+end # function combine_color_slots(imhisto_in::AbstractArray, nslots::Int = 0)
 
 # ToDo : => no, array tooooo large
 # my_rgb24int = Int32.(floor.(red.(colv)*255)) .<< 16 .+ Int32.(floor.(green.(colv)*255)) .<< 8 .+ Int32.(floor.(blue.(colv)*255))
@@ -437,7 +519,7 @@ function plot_imhi(;ihGray_cooked::AbstractArray = [0], ihR_cooked::AbstractArra
     else
         theme(:default); # good for paper
         GrayShade=:gray71;
-    end        
+    end
 
     if (how == 1)
         plot(ihGray_cooked, color=GrayShade, w=3, line=:sticks);
@@ -483,19 +565,19 @@ function plot_imhi_GrayRGB(imarray::AbstractArray; how::Int = 2, bg::Int = 0)
     #
     # ToDo:  change how & background to keyword args.
     #
-    
-    ihR, ihG, ihB = ImageHistogramTest.imhistogramRGB(imarray);
-    ihGray = ImageHistogramTest.imhistogramGray(imarray);
 
-    plot_imhi(ihGray_cooked=ihGray,ihR_cooked=ihR, ihG_cooked=ihG, ihB_cooked=ihB, how=how, bg=bg)
+    ihR, ihG, ihB = ImageHistogramTest.imhistogramRGB(imarray);
+    ihGray        = ImageHistogramTest.imhistogramGray(imarray);
+
+    plot_imhi(ihGray_cooked=ihGray, ihR_cooked=ihR, ihG_cooked=ihG, ihB_cooked=ihB, how=how, bg=bg)
 
     #=
     # das folgende braucht noch 'using Plots'
     # Plot examples:
     # or using as subplot
     # plot_red = plot(ihr, line=:red, w=2);
-    # plot(plot_red, plot_green, plot_blue, plot_gray,layout=(2,2),legend=false)
-    
+    # plot(plot_red, plot_green, plot_blue, plot_gray, layout=(2,2), legend=false)
+
     # WATCH OUT !!  WATCH OUT !!
     # after switching to use OffsetArrays
     # plot needs another syntax
@@ -504,24 +586,24 @@ function plot_imhi_GrayRGB(imarray::AbstractArray; how::Int = 2, bg::Int = 0)
 
     ploting into a 3d RGB-cube:
     using Images, TestImages ; import ImageHistogram ; img_col256 = testimage("lena_color_256");
-    redv, greenv,bluev, colv = ImageHistogram.imhistogramRGB3d(img_col256);
+    redv, greenv, bluev, colv = ImageHistogram.imhistogramRGB3d(img_col256);
     redv1=redv[1:32:65536]; greenv1=greenv[1:32:65536]; bluev1=bluev[1:32:65536]; colv1=colv[1:32:65536];
-    
+
     plot using Plots:
-    scatter3d(redv1, greenv1, bluev1, xlabel="red",ylabel="green",zlabel="blue"; color=colv1)
-    scatter3d(redv[1:50:end], greenv[1:50:end], bluev[1:50:end],color=colv[1:50:end], markersize=3,marker=:cross)
+    scatter3d(redv1, greenv1, bluev1, xlabel="red", ylabel="green", zlabel="blue"; color=colv1)
+    scatter3d(redv[1:50:end], greenv[1:50:end], bluev[1:50:end], color=colv[1:50:end], markersize=3, marker=:cross)
 
     plot using GR:
     setmarkersize=1; setmarkertype(GR.MARKERTYPE_DOT)
-    scatter3(redv1, greenv1, bluev1, xlabel="red",ylabel="green",zlabel="blue"; color=colv1)
-    
+    scatter3(redv1, greenv1, bluev1, xlabel="red", ylabel="green", zlabel="blue"; color=colv1)
+
     the previous is not as good as using gnuplot
     some reasons:
     Plots and GR do not support x-, y-, z-lables as expected
     take too long
     ? grid ?
     ? user defined view angle ?
-    
+
     =#
 end # function plot_imhi_GrayRGB
 
